@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#include "xil_io.h"
-#include "xparameters.h"
+#include "xil_io.h"      /* Xil_In32/Xil_Out32 talk to memory-mapped AXI registers in hardware. */
+#include "xparameters.h" /* Vivado/Vitis-generated base addresses for the exported AXI peripherals. */
 
 #define SCREEN_W 320U
 #define SCREEN_H 240U
@@ -30,24 +30,24 @@
 #define PLAYER_START_X ((SCREEN_W - PLAYER_W) / 2U)
 #define PROJECTILE_OFFSCREEN_Y 0x3FFU
 
-#define REG_PLAYER_X              0x00U
-#define REG_PLAYER_PROJECTILE     0x04U
-#define REG_GRID_X                0x08U
-#define REG_GRID_Y                0x0CU
-#define REG_GRID_STEP             0x10U
-#define REG_ALIEN_ALIVE_WORD0     0x14U
-#define REG_ALIEN_ALIVE_WORD1     0x18U
-#define REG_ALIEN_ALIVE_WORD2     0x1CU
-#define REG_ALIEN_PROJECTILE0     0x20U
-#define REG_ALIEN_PROJECTILE7     0x3CU
-#define REG_SHIELD_DAMAGE0        0x40U
-#define REG_SHIELD_DAMAGE3        0x4CU
-#define REG_UFO                   0x50U
-#define REG_GAME_STATE            0x54U
-#define REG_COLLISION_FLAGS       0x58U
-#define REG_FRAME_COUNTER         0x5CU
+#define REG_PLAYER_X              0x00U /* AXI register consumed by SystemVerilog to place the player sprite. */
+#define REG_PLAYER_PROJECTILE     0x04U /* AXI register consumed by SystemVerilog to place/show the player projectile. */
+#define REG_GRID_X                0x08U /* AXI register consumed by SystemVerilog as the alien grid left edge. */
+#define REG_GRID_Y                0x0CU /* AXI register consumed by SystemVerilog as the alien grid top edge. */
+#define REG_GRID_STEP             0x10U /* AXI register consumed by SystemVerilog for alien animation phase/step. */
+#define REG_ALIEN_ALIVE_WORD0     0x14U /* AXI register consumed by SystemVerilog for alien alive bits [31:0]. */
+#define REG_ALIEN_ALIVE_WORD1     0x18U /* AXI register consumed by SystemVerilog for alien alive bits [63:32]. */
+#define REG_ALIEN_ALIVE_WORD2     0x1CU /* AXI register consumed by SystemVerilog for the remaining alien alive bits. */
+#define REG_ALIEN_PROJECTILE0     0x20U /* AXI register range reserved for alien projectile state in hardware. */
+#define REG_ALIEN_PROJECTILE7     0x3CU /* Last alien projectile AXI register seen by the sprite engine. */
+#define REG_SHIELD_DAMAGE0        0x40U /* AXI register range reserved for shield state consumed by hardware. */
+#define REG_SHIELD_DAMAGE3        0x4CU /* Last shield-damage AXI register seen by the sprite engine. */
+#define REG_UFO                   0x50U /* AXI register consumed by SystemVerilog for UFO enable/position. */
+#define REG_GAME_STATE            0x54U /* AXI register consumed by SystemVerilog for start/play/game-over display mode. */
+#define REG_COLLISION_FLAGS       0x58U /* AXI register produced by hardware if the sprite engine exposes collision flags. */
+#define REG_FRAME_COUNTER         0x5CU /* AXI register produced by hardware; increments once per VSYNC/frame. */
 
-#define SPRITE_ENGINE_BASEADDR XPAR_SPRITE_ENGINE_0_S00_AXI_BASEADDR
+#define SPRITE_ENGINE_BASEADDR XPAR_SPRITE_ENGINE_0_S00_AXI_BASEADDR /* Base address of the custom Vivado sprite-engine AXI slave. */
 
 /*
  * Replace this base address with the keyboard or USB-HID peripheral generated
@@ -57,9 +57,9 @@
 #define XPAR_KEYBOARD_0_S00_AXI_BASEADDR 0U
 #endif
 
-#define KEYBOARD_BASEADDR XPAR_KEYBOARD_0_S00_AXI_BASEADDR
-#define REG_KEYBOARD_HELD         0x00U
-#define REG_KEYBOARD_PRESSED      0x04U
+#define KEYBOARD_BASEADDR XPAR_KEYBOARD_0_S00_AXI_BASEADDR /* Base address of the keyboard/USB AXI peripheral from Vivado. */
+#define REG_KEYBOARD_HELD         0x00U /* Hardware-owned register for keys currently held down. */
+#define REG_KEYBOARD_PRESSED      0x04U /* Hardware-owned register for edge-detected key presses. */
 
 #define KEY_LEFT_MASK   (1U << 0)
 #define KEY_RIGHT_MASK  (1U << 1)

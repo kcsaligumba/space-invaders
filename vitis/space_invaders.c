@@ -54,7 +54,7 @@ void reset_game(game_t *game)
     game->alien_dir = 1;
     game->score = 0U;
     game->lives = 3U;
-    game->last_frame_counter = Xil_In32(SPRITE_ENGINE_BASEADDR + REG_FRAME_COUNTER);
+    game->last_frame_counter = Xil_In32(SPRITE_ENGINE_BASEADDR + REG_FRAME_COUNTER); /* Read the hardware frame counter so software starts in sync with VSYNC. */
     game->alien_step_timer = 0U;
 
     for (i = 0; i < 3U; ++i) {
@@ -73,7 +73,7 @@ void wait_for_frame(game_t *game)
     uint32_t frame_counter;
 
     do {
-        frame_counter = Xil_In32(SPRITE_ENGINE_BASEADDR + REG_FRAME_COUNTER);
+        frame_counter = Xil_In32(SPRITE_ENGINE_BASEADDR + REG_FRAME_COUNTER); /* Poll the SystemVerilog frame counter register exposed over AXI. */
     } while (frame_counter == game->last_frame_counter);
 
     game->last_frame_counter = frame_counter;
@@ -86,8 +86,8 @@ keyboard_state_t read_keyboard(void)
     uint32_t pressed = 0U;
 
     if (KEYBOARD_BASEADDR != 0U) {
-        held = Xil_In32(KEYBOARD_BASEADDR + REG_KEYBOARD_HELD);
-        pressed = Xil_In32(KEYBOARD_BASEADDR + REG_KEYBOARD_PRESSED);
+        held = Xil_In32(KEYBOARD_BASEADDR + REG_KEYBOARD_HELD);       /* Read key-held state from the keyboard AXI peripheral. */
+        pressed = Xil_In32(KEYBOARD_BASEADDR + REG_KEYBOARD_PRESSED); /* Read key-press edges from the keyboard AXI peripheral. */
     }
 
     keys.left_held = (held & KEY_LEFT_MASK) != 0U;
@@ -284,24 +284,24 @@ void write_sprite_registers(const game_t *game)
 {
     uint32_t offset;
 
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_PLAYER_X, game->player_x);
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_PLAYER_X, game->player_x); /* Write player X so SystemVerilog can place the player sprite. */
     Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_PLAYER_PROJECTILE,
-              pack_projectile(game->player_projectile));
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GRID_X, game->grid_x);
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GRID_Y, game->grid_y);
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GRID_STEP, game->alien_anim_phase);
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_ALIEN_ALIVE_WORD0, game->alien_alive[0]);
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_ALIEN_ALIVE_WORD1, game->alien_alive[1]);
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_ALIEN_ALIVE_WORD2, game->alien_alive[2]);
+              pack_projectile(game->player_projectile)); /* Write packed projectile state for hardware unpack/display. */
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GRID_X, game->grid_x); /* Write alien-grid X anchor used by SystemVerilog placement logic. */
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GRID_Y, game->grid_y); /* Write alien-grid Y anchor used by SystemVerilog placement logic. */
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GRID_STEP, game->alien_anim_phase); /* Write animation phase consumed by the alien sprite selector. */
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_ALIEN_ALIVE_WORD0, game->alien_alive[0]); /* Write alive bitmap low word consumed by the renderer. */
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_ALIEN_ALIVE_WORD1, game->alien_alive[1]); /* Write alive bitmap middle word consumed by the renderer. */
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_ALIEN_ALIVE_WORD2, game->alien_alive[2]); /* Write alive bitmap high word consumed by the renderer. */
 
     for (offset = REG_ALIEN_PROJECTILE0; offset <= REG_ALIEN_PROJECTILE7; offset += 4U) {
-        Xil_Out32(SPRITE_ENGINE_BASEADDR + offset, 0U);
+        Xil_Out32(SPRITE_ENGINE_BASEADDR + offset, 0U); /* Drive unused alien-projectile hardware registers to a known value. */
     }
 
     for (offset = REG_SHIELD_DAMAGE0; offset <= REG_SHIELD_DAMAGE3; offset += 4U) {
-        Xil_Out32(SPRITE_ENGINE_BASEADDR + offset, 0U);
+        Xil_Out32(SPRITE_ENGINE_BASEADDR + offset, 0U); /* Drive unused shield-state hardware registers to a known value. */
     }
 
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_UFO, pack_ufo());
-    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GAME_STATE, (uint32_t)game->state);
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_UFO, pack_ufo()); /* Write UFO state for the hardware sprite engine; baseline keeps it disabled. */
+    Xil_Out32(SPRITE_ENGINE_BASEADDR + REG_GAME_STATE, (uint32_t)game->state); /* Write current game mode for any SV-side screen selection. */
 }
