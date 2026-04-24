@@ -57,15 +57,15 @@ module pixel_mux (
     // --- Player sprite ROM ---
     logic [$clog2(PLAYER_H)-1:0] player_row;
     logic [PLAYER_W-1:0]         player_bits;
-    sprite_rom #(.WIDTH(PLAYER_W), .HEIGHT(PLAYER_H), .INIT_FILE("player.mem"))
+    sprite_rom #(.WIDTH(PLAYER_W), .HEIGHT(PLAYER_H), .INIT_FILE("mem/player.mem"))
         u_player_rom (.clk(pixel_clk), .row(player_row), .row_bits(player_bits));
 
     // --- Alien sprite ROMs (one per animation frame) ---
     logic [$clog2(ALIEN_H)-1:0] alien_row;
     logic [ALIEN_W-1:0]         alien_bits_a, alien_bits_b, alien_bits;
-    sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("alienA1.mem"))
+    sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("mem/alienA1.mem"))
         u_alien_rom_a (.clk(pixel_clk), .row(alien_row), .row_bits(alien_bits_a));
-    sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("alienA2.mem"))
+    sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("mem/alienA2.mem"))
         u_alien_rom_b (.clk(pixel_clk), .row(alien_row), .row_bits(alien_bits_b));
     assign alien_bits = grid_step ? alien_bits_b : alien_bits_a;
 

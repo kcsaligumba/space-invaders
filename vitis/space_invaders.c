@@ -113,8 +113,8 @@ void update_player(game_t *game, keyboard_state_t keys)
 
     if (keys.space_pressed && !game->player_projectile.active) {
         game->player_projectile.active = 1U;
-        game->player_projectile.x = game->player_x + (PLAYER_W / 2U);
-        game->player_projectile.y = PLAYER_Y - 1U;
+        game->player_projectile.x = game->player_x + (PLAYER_W / 2U) - (PROJECTILE_W / 2U);
+        game->player_projectile.y = PLAYER_Y - PROJECTILE_H;
     }
 }
 
@@ -166,33 +166,40 @@ void check_projectile_alien_collision(game_t *game)
 {
     uint32_t row;
     uint32_t col;
-    uint16_t proj_x;
-    uint16_t proj_y;
+    uint16_t proj_left;
+    uint16_t proj_right;
+    uint16_t proj_top;
+    uint16_t proj_bottom;
 
     if (!game->player_projectile.active) {
         return;
     }
 
-    proj_x = game->player_projectile.x;
-    proj_y = game->player_projectile.y;
+    proj_left = game->player_projectile.x;
+    proj_right = game->player_projectile.x + PROJECTILE_W - 1U;
+    proj_top = game->player_projectile.y;
+    proj_bottom = game->player_projectile.y + PROJECTILE_H - 1U;
 
     for (row = 0; row < ALIEN_ROWS; ++row) {
         uint16_t alien_y = game->grid_y + (row * ALIEN_STRIDE_Y);
+        uint16_t alien_bottom = alien_y + ALIEN_H - 1U;
 
-        if ((proj_y + 1U) < alien_y || proj_y > (alien_y + ALIEN_H)) {
+        if (proj_bottom < alien_y || proj_top > alien_bottom) {
             continue;
         }
 
         for (col = 0; col < ALIEN_COLS; ++col) {
             uint16_t alien_x;
+            uint16_t alien_right;
 
             if (!get_alive_bit(game, row, col)) {
                 continue;
             }
 
             alien_x = game->grid_x + (col * ALIEN_STRIDE_X);
+            alien_right = alien_x + ALIEN_W - 1U;
 
-            if (proj_x >= alien_x && proj_x <= (alien_x + ALIEN_W)) {
+            if (proj_right >= alien_x && proj_left <= alien_right) {
                 clear_alive_bit(game, row, col);
                 game->player_projectile.active = 0U;
                 game->player_projectile.x = 0U;
