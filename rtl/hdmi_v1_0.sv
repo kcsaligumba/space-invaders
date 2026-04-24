@@ -67,6 +67,8 @@ module hdmi_v1_0 #
         .locked  (clk_wiz_locked)
     );
 
+    // Active-high reset for pixel-clock-domain logic (VGA, pixel_mux).
+    // hdmi_tx_v1_0 also accepts this; it internally ORs it with ~pix_clk_locked.
     logic pixel_reset;
     assign pixel_reset = ~clk_wiz_locked;
 
@@ -160,21 +162,31 @@ module hdmi_v1_0 #
         .blue               (pix_b)
     );
 
-    // ---- RGB -> HDMI/TMDS ----
-    // rgb2dvi_0 is a Digilent/Xilinx IP that handles TMDS encoding + serialization.
-    // If the course uses a different core (e.g. hdmi_tx_0), swap the instance.
-    rgb2dvi_0 u_rgb2dvi (
-        .TMDS_Clk_p   (hdmi_clk_p),
-        .TMDS_Clk_n   (hdmi_clk_n),
-        .TMDS_Data_p  (hdmi_tx_p),
-        .TMDS_Data_n  (hdmi_tx_n),
-        .aRst         (pixel_reset),
-        .vid_pData    ({pix_r, pix_g, pix_b}),
-        .vid_pVDE     (vga_active),
-        .vid_pHSync   (hsync),
-        .vid_pVSync   (vsync),
-        .PixelClk     (pixel_clk),
-        .SerialClk    (serial_clk)
+    // ---- RGB -> HDMI/TMDS (hdmi_tx_1.0 by RealDigital / XAPP460) ----
+    hdmi_tx_v1_0 #(
+        .MODE          ("DVI"),   // DVI avoids guardband pink-line issue on most monitors;
+        .C_RED_WIDTH   (8),       // switch to "HDMI" if your monitor requires HDMI mode.
+        .C_GREEN_WIDTH (8),
+        .C_BLUE_WIDTH  (8)
+    ) u_hdmi_tx (
+        .pix_clk        (pixel_clk),
+        .pix_clkx5      (serial_clk),
+        .pix_clk_locked (clk_wiz_locked),
+        .rst            (pixel_reset),
+        .red            (pix_r),
+        .green          (pix_g),
+        .blue           (pix_b),
+        .hsync          (hsync),
+        .vsync          (vsync),
+        .vde            (vga_active),
+        .aux0_din       (4'b0),
+        .aux1_din       (4'b0),
+        .aux2_din       (4'b0),
+        .ade            (1'b0),
+        .TMDS_CLK_P     (hdmi_clk_p),
+        .TMDS_CLK_N     (hdmi_clk_n),
+        .TMDS_DATA_P    (hdmi_tx_p),
+        .TMDS_DATA_N    (hdmi_tx_n)
     );
 
     // ---- Frame counter and VSYNC interrupt ----
