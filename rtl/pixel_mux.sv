@@ -46,8 +46,8 @@ module pixel_mux (
 
     localparam int ALIEN_W  = 16;
     localparam int ALIEN_H  = 8;
-    localparam int ALIEN_STRIDE_X = 20;         // 16 + 4 gap
-    localparam int ALIEN_STRIDE_Y = 14;
+    localparam int ALIEN_STRIDE_X = 22;         // Match Vitis game logic spacing.
+    localparam int ALIEN_STRIDE_Y = 16;         // Match Vitis game logic spacing.
     localparam int GRID_COLS = 11;
     localparam int GRID_ROWS = 5;
 
