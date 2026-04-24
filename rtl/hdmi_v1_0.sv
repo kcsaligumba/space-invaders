@@ -3,10 +3,10 @@
 //   - Clocking Wizard (clk_wiz_0): 25 MHz pixel clock and 125 MHz TMDS serial clock.
 //   - vga_controller: 640x480@60 timing generator.
 //   - pixel_mux:      sprite compositing.
-//   - rgb2dvi (or hdmi_tx) IP: serializes RGB + syncs to TMDS HDMI output.
+//   - hdmi_tx_0 IP: serializes RGB + syncs to TMDS HDMI output.
 //   - AXI slave:      MicroBlaze-facing sprite engine register file.
 //
-// Note: clk_wiz_0 and rgb2dvi_0 are Vivado IP-catalog cores. Instantiate them
+// Note: clk_wiz_0 and hdmi_tx_0 are Vivado IP-catalog cores. Instantiate them
 // in the IP integrator / IP catalog with matching names before synthesis.
 
 `timescale 1 ns / 1 ps
@@ -163,7 +163,7 @@ module hdmi_v1_0 #
     );
 
     // ---- RGB -> HDMI/TMDS (hdmi_tx_1.0 by RealDigital / XAPP460) ----
-    hdmi_tx_v1_0 #(
+    hdmi_tx_0 #(
         .MODE          ("DVI"),   // DVI avoids guardband pink-line issue on most monitors;
         .C_RED_WIDTH   (8),       // switch to "HDMI" if your monitor requires HDMI mode.
         .C_GREEN_WIDTH (8),
