@@ -27,7 +27,7 @@ module hdmi_v1_0 #
     output logic        frame_irq,
 
     // AXI4-Lite slave
-    input  logic axi_aclk,
+    (* CLOCK_BUFFER_TYPE = "NONE" *) input  logic axi_aclk,
     input  logic axi_aresetn,
     input  logic [C_AXI_ADDR_WIDTH-1 : 0] axi_awaddr,
     input  logic [2 : 0] axi_awprot,
@@ -162,10 +162,10 @@ module hdmi_v1_0 #
         .blue               (pix_b)
     );
 
-    // ---- RGB -> HDMI/TMDS (hdmi_tx_1.0 by RealDigital / XAPP460) ----
-    hdmi_tx_0 #(
-        .MODE          ("DVI"),   // DVI avoids guardband pink-line issue on most monitors;
-        .C_RED_WIDTH   (8),       // switch to "HDMI" if your monitor requires HDMI mode.
+    // ---- RGB -> HDMI/TMDS (hdmi_tx_v1_0 RTL, included directly) ----
+    hdmi_tx_v1_0 #(
+        .MODE          ("DVI"),
+        .C_RED_WIDTH   (8),
         .C_GREEN_WIDTH (8),
         .C_BLUE_WIDTH  (8)
     ) u_hdmi_tx (
