@@ -637,7 +637,7 @@ uint8_t usb_hid_enter_pressed(void)
 uint8_t usb_hid_r_pressed(void)
     { uint8_t v = s_r_edge; s_r_edge = 0u; return v; }
 
-#else  /* !USB_HID_SPI_PRESENT -- stubs; game works via GPIO buttons only */
+#else  /* !USB_HID_SPI_PRESENT - stubs; game works via GPIO buttons only */
 
 int     usb_hid_init(void)          { return -1; }
 void    usb_hid_poll(void)          {}
