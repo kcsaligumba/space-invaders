@@ -8,10 +8,6 @@ int main(void)
 {
     init_platform();
     usb_hid_init();
-#ifdef XPAR_AXI_GPIO_1_BASEADDR
-    Xil_Out32(XPAR_AXI_GPIO_1_BASEADDR + 0x0004U, 0x00000000U);
-    Xil_Out32(XPAR_AXI_GPIO_1_BASEADDR, usb_hid_status_word());
-#endif
     reset_game(&game);
 
     while (1) {
@@ -21,9 +17,6 @@ int main(void)
         /* Temporary: fixed delay instead of frame-sync, to diagnose HDMI */
         for (i = 0u; i < 2000000u; i++) { (void)i; }
         keys = read_keyboard();
-#ifdef XPAR_AXI_GPIO_1_BASEADDR
-        Xil_Out32(XPAR_AXI_GPIO_1_BASEADDR, usb_hid_status_word());
-#endif
 
         if (game.state == STATE_START) {
             if (keys.enter_pressed) {

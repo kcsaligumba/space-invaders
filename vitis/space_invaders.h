@@ -49,20 +49,6 @@
 
 #define SPRITE_ENGINE_BASEADDR XPAR_HDMI_0_AXI_BASEADDR
 
-/* AXI GPIO base addresses */
-#define GPIO0_BASEADDR   XPAR_AXI_GPIO_0_BASEADDR
-#define GPIO_DATA_OFFSET 0x0000U
-
-/*
- * Controls mapped to Urbana board buttons (gpio_0[16:18]):
- *   gpio_0[16] pin J1 move left  (held)
- *   gpio_0[17] pin G2 move right (held)
- *   gpio_0[18] pin H2 fire / start / restart (edge-triggered)
- */
-#define KEY_LEFT_MASK    (1U << 16)
-#define KEY_RIGHT_MASK   (1U << 17)
-#define KEY_ACTION_MASK  (1U << 18)
-
 typedef enum {
     STATE_START    = 0,
     STATE_PLAYING  = 1,

@@ -32,8 +32,6 @@ void reset_game(game_t *game)
 {
     uint32_t i;
 
-    Xil_Out32(GPIO0_BASEADDR + 0x0004U, 0xFFFFFFFFU);
-
     game->state = STATE_START;
     game->player_x = PLAYER_START_X;
     game->player_projectile.active = 0U;
@@ -69,25 +67,14 @@ void wait_for_frame(game_t *game)
 
 keyboard_state_t read_keyboard(void)
 {
-    static uint32_t prev_gpio = 0U;
     keyboard_state_t keys = {0, 0, 0, 0, 0};
-    uint32_t gpio_val = Xil_In32(GPIO0_BASEADDR + GPIO_DATA_OFFSET);
-    uint32_t newly_pressed = gpio_val & ~prev_gpio;
-
-    keys.left_held       = (gpio_val      & KEY_LEFT_MASK)   != 0U;
-    keys.right_held      = (gpio_val      & KEY_RIGHT_MASK)  != 0U;
-    keys.space_pressed   = (newly_pressed & KEY_ACTION_MASK) != 0U;
-    keys.enter_pressed   = (newly_pressed & KEY_ACTION_MASK) != 0U;
-    keys.restart_pressed = (newly_pressed & KEY_ACTION_MASK) != 0U;
-
-    prev_gpio = gpio_val;
 
     usb_hid_poll();
-    keys.left_held       |= usb_hid_left_held();
-    keys.right_held      |= usb_hid_right_held();
-    keys.space_pressed   |= usb_hid_space_pressed();
-    keys.enter_pressed   |= usb_hid_enter_pressed();
-    keys.restart_pressed |= usb_hid_r_pressed();
+    keys.left_held       = usb_hid_left_held();
+    keys.right_held      = usb_hid_right_held();
+    keys.space_pressed   = usb_hid_space_pressed();
+    keys.enter_pressed   = usb_hid_enter_pressed();
+    keys.restart_pressed = usb_hid_r_pressed();
 
     return keys;
 }
