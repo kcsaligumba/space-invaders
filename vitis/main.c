@@ -2,18 +2,20 @@
 #include "space_invaders.h"
 #include "usb_hid.h"
 
+static game_t game;
+
 int main(void)
 {
-    game_t game;
-
     init_platform();
     usb_hid_init();
     reset_game(&game);
 
     while (1) {
         keyboard_state_t keys;
+        uint32_t i;
 
-        wait_for_frame(&game);
+        /* Temporary: fixed delay instead of frame-sync, to diagnose HDMI */
+        for (i = 0u; i < 2000000u; i++) { (void)i; }
         keys = read_keyboard();
 
         if (game.state == STATE_START) {

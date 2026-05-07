@@ -18,9 +18,15 @@ module space_invaders_top (
     input  logic        uart_rxd,
     output logic        uart_txd,
 
-    // GPIO (32-bit tristate â€” AXI GPIO IP)
+    // GPIO (32-bit tristate — AXI GPIO IP)
     inout  wire [31:0]  gpio_0,
-    inout  wire [31:0]  gpio_1
+    inout  wire [31:0]  gpio_1,
+
+    // USB SPI (MAX3421E)
+    output logic        usb_sclk,
+    output logic        usb_mosi,
+    input  logic        usb_miso,
+    output logic        usb_ss_n
 );
 
     design_1_wrapper u_bd (
@@ -28,7 +34,6 @@ module space_invaders_top (
         .diff_clock_rtl_0_clk_n (sys_clk_n),
         .reset_rtl_0             (~cpu_resetn),
 
-        // HDMI â€” names will be confirmed after regenerating the wrapper
         .hdmi_clk_p_0  (hdmi_clk_p),
         .hdmi_clk_n_0  (hdmi_clk_n),
         .hdmi_tx_p_0   (hdmi_tx_p),
@@ -38,7 +43,12 @@ module space_invaders_top (
         .uart_rtl_0_txd (uart_txd),
 
         .gpio_rtl_0_tri_io (gpio_0),
-        .gpio_rtl_1_tri_io (gpio_1)
+        .gpio_rtl_1_tri_io (gpio_1),
+
+        .usb_sclk  (usb_sclk),
+        .usb_mosi  (usb_mosi),
+        .usb_miso  (usb_miso),
+        .usb_ss_n  (usb_ss_n)
     );
 
 endmodule

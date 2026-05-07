@@ -16,8 +16,8 @@
 #define ALIEN_COLS 11U
 #define ALIEN_W 16U
 #define ALIEN_H 8U
-#define ALIEN_STRIDE_X 20U
-#define ALIEN_STRIDE_Y 14U
+#define ALIEN_STRIDE_X 22U  /* must match pixel_mux.sv ALIEN_STRIDE_X */
+#define ALIEN_STRIDE_Y 16U  /* must match pixel_mux.sv ALIEN_STRIDE_Y */
 #define TOTAL_ALIENS 55U
 
 #define PLAYER_SPEED 2U
@@ -59,8 +59,8 @@
  *   gpio_0[17] pin G2 move right (held)
  *   gpio_0[18] pin H2 fire / start / restart (edge-triggered)
  */
-#define KEY_LEFT_MASK    (1U << 17)
-#define KEY_RIGHT_MASK   (1U << 16)
+#define KEY_LEFT_MASK    (1U << 16)
+#define KEY_RIGHT_MASK   (1U << 17)
 #define KEY_ACTION_MASK  (1U << 18)
 
 typedef enum {
