@@ -6,8 +6,11 @@ static game_t game;
 
 int main(void)
 {
+    uint32_t debug_loop = 0U;
+
     init_platform();
     usb_hid_init();
+    usb_hid_print_diag("after-init");
     reset_game(&game);
 
     while (1) {
@@ -17,6 +20,11 @@ int main(void)
         /* Temporary: fixed delay instead of frame-sync, to diagnose HDMI */
         for (i = 0u; i < 2000000u; i++) { (void)i; }
         keys = read_keyboard();
+        debug_loop++;
+
+        if ((debug_loop & 0x7FU) == 0U) {
+            usb_hid_print_diag("poll");
+        }
 
         if (game.state == STATE_START) {
             if (keys.enter_pressed) {

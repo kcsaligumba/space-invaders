@@ -1,5 +1,8 @@
 #include "usb_hid.h"
 #include "xparameters.h"
+#include "xil_printf.h"
+#include <stddef.h>
+#include <string.h>
 
 #if defined(XPAR_SPI_USB_BASEADDR)
 #  define SPI_BASE XPAR_SPI_USB_BASEADDR
@@ -47,6 +50,7 @@ typedef unsigned short WORD;
 #define bmFDUPSPI     0x10u
 #define bmINTLEVEL    0x08u
 #define bmGPXB        0x02u
+#define rREVISION     0x90u
 #define rIOPINS1      0xa0u
 #define bmGPOUT0      0x01u
 #define rHIRQ         0xc8u
@@ -113,6 +117,14 @@ static uint8_t s_space_held;
 static uint8_t s_enter_held;
 static uint8_t s_r_held;
 
+/* Hardware debug state surfaced over UART by usb_hid_print_diag(). */
+static usb_hid_diag_t s_diag = {
+    .compiled_in = 1u,
+    .last_poll_rc = 0xffu,
+    .blind_connect_rc = 0xffu,
+    .spi_base = (uint32_t)SPI_BASE
+};
+
 /* -----------------------------------------------------------------------
  * SPI core: load TX FIFO, start, drain RX FIFO.
  * --------------------------------------------------------------------- */
@@ -128,7 +140,12 @@ static void spi_xfer(BYTE len)
         for (t = 0u; t < 2000u; t++) {
             if ((SPI_SR & SPI_SR_RX_EMPTY) == 0u) break;
         }
-        if (t >= 2000u) { SPI_CR = SPI_CR_BASE; s_spi_dead = 1u; return; }
+        if (t >= 2000u) {
+            SPI_CR = SPI_CR_BASE;
+            s_spi_dead = 1u;
+            s_diag.spi_dead = 1u;
+            return;
+        }
         s_spi_rx[i] = (BYTE)SPI_DRR;
     }
     SPI_CR = SPI_CR_BASE;
@@ -196,9 +213,15 @@ static BYTE XferInTransfer(BYTE *data)
     BYTE rcode, pktsize, i;
     MAXreg_wr(rHCTL, s_ep1_rcv_toggle);
     rcode = XferDispatchPkt(tokIN, 1u);
+    s_diag.last_poll_rc = rcode;
     if (rcode) return rcode;
-    if ((MAXreg_rd(rHIRQ) & bmRCVDAVIRQ) == 0u) return 0xf0u;
+    s_diag.last_hirq = MAXreg_rd(rHIRQ);
+    if ((s_diag.last_hirq & bmRCVDAVIRQ) == 0u) {
+        s_diag.last_poll_rc = 0xf0u;
+        return 0xf0u;
+    }
     pktsize = MAXreg_rd(rRCVBC);
+    s_diag.last_rcvbc = pktsize;
     if (pktsize > 8u) pktsize = 8u;
     if (pktsize > 0u) {
         s_spi_tx[0] = rRCVFIFO;
@@ -245,9 +268,11 @@ static void parse_report(const BYTE *buf)
 static BYTE blind_connect(void)
 {
     BYTE busstate;
+    BYTE rcode;
     unsigned int i;
 
     busstate = (BYTE)(MAXreg_rd(rHRSL) & (bmJSTATUS | bmKSTATUS));
+    s_diag.hrsl_initial = busstate;
     MAXreg_wr(rMODE, (busstate == bmJSTATUS) ? MODE_FS_HOST : MODE_LS_HOST);
     for (i = 0u; i < 20000u; i++) { (void)MAXreg_rd(rHIRQ); }
 
@@ -261,15 +286,25 @@ static BYTE blind_connect(void)
         if (MAXreg_rd(rHIRQ) & bmFRAMEIRQ) break;
     }
 
-    if (send_setup_nodata(0u, bmREQ_SET, USB_REQUEST_SET_ADDRESS, 1u, 0u, 0u))
+    rcode = send_setup_nodata(0u, bmREQ_SET, USB_REQUEST_SET_ADDRESS, 1u, 0u, 0u);
+    if (rcode) {
+        s_diag.blind_connect_rc = rcode;
         return 0xffu;
+    }
     for (i = 0u; i < 200000u; i++) { (void)MAXreg_rd(rHIRQ); }
-    if (send_setup_nodata(1u, bmREQ_SET, USB_REQUEST_SET_CONFIGURATION, 1u, 0u, 0u))
+    rcode = send_setup_nodata(1u, bmREQ_SET, USB_REQUEST_SET_CONFIGURATION, 1u, 0u, 0u);
+    if (rcode) {
+        s_diag.blind_connect_rc = rcode;
         return 0xffu;
-    if (send_setup_nodata(1u, bmREQ_HIDOUT, HID_REQUEST_SET_PROTOCOL, BOOT_PROTOCOL, 0u, 0u))
+    }
+    rcode = send_setup_nodata(1u, bmREQ_HIDOUT, HID_REQUEST_SET_PROTOCOL, BOOT_PROTOCOL, 0u, 0u);
+    if (rcode) {
+        s_diag.blind_connect_rc = rcode;
         return 0xffu;
+    }
 
     s_ep1_rcv_toggle = bmRCVTOG0;
+    s_diag.blind_connect_rc = 0u;
     return 0u;
 }
 
@@ -280,18 +315,43 @@ int usb_hid_init(void)
 {
     unsigned int i;
 
+    memset(&s_diag, 0, sizeof(s_diag));
+    s_diag.compiled_in = 1u;
+    s_diag.spi_base = (uint32_t)SPI_BASE;
+    s_diag.last_poll_rc = 0xffu;
+    s_diag.blind_connect_rc = 0xffu;
+    s_spi_dead = 0u;
+    s_left_held = 0u;
+    s_right_held = 0u;
+    s_space_edge = 0u;
+    s_enter_edge = 0u;
+    s_r_edge = 0u;
+    s_space_held = 0u;
+    s_enter_held = 0u;
+    s_r_held = 0u;
+    xil_printf("USB HID: compiled in, SPI_BASE=0x%x\r\n", (unsigned int)SPI_BASE);
+
     SPI_SRR   = 0x0Au;
     for (i = 0u; i < 200u; i++) { (void)i; }
     SPI_DGIER = 0u;
     SPI_CR    = SPI_CR_BASE;
     SPI_SSR   = 1u;
 
+    s_diag.revision = MAXreg_rd(rREVISION);
+    s_diag.usbirq_initial = MAXreg_rd(rUSBIRQ);
+    xil_printf("USB HID: MAX3421E REV=0x%x USBIRQ0=0x%x spi_dead=%d\r\n",
+               s_diag.revision, s_diag.usbirq_initial, s_diag.spi_dead);
+
     MAXreg_wr(rPINCTL, (BYTE)(bmFDUPSPI | bmINTLEVEL | bmGPXB));
     MAXreg_wr(rUSBCTL, bmCHIPRES);
     MAXreg_wr(rUSBCTL, 0x00u);
     for (i = 0u; i < 50000u; i++) {
-        if (MAXreg_rd(rUSBIRQ) & bmOSCOKIRQ) break;
+        s_diag.usbirq_after_reset = MAXreg_rd(rUSBIRQ);
+        if (s_diag.usbirq_after_reset & bmOSCOKIRQ) break;
     }
+    s_diag.osc_ok = ((s_diag.usbirq_after_reset & bmOSCOKIRQ) != 0u);
+    xil_printf("USB HID: USBIRQ1=0x%x osc_ok=%d spi_dead=%d\r\n",
+               s_diag.usbirq_after_reset, s_diag.osc_ok, s_diag.spi_dead);
 
     MAXreg_wr(rIOPINS1, (BYTE)(MAXreg_rd(rIOPINS1) | bmGPOUT0));
     MAXreg_wr(rMODE, (BYTE)(bmDPPULLDN | bmDMPULLDN | bmHOST | bmSEPIRQ));
@@ -299,9 +359,14 @@ int usb_hid_init(void)
 
     /* Wait up to ~50K polls for device to appear, then try blind connect */
     for (i = 0u; i < 50000u; i++) {
-        if (MAXreg_rd(rHRSL) & (bmJSTATUS | bmKSTATUS)) break;
+        s_diag.hrsl_after_wait = (BYTE)(MAXreg_rd(rHRSL) & (bmJSTATUS | bmKSTATUS));
+        if (s_diag.hrsl_after_wait) break;
     }
-    blind_connect(); /* ignore failure; keyboard reads silently fail if absent */
+    xil_printf("USB HID: HRSL bus=0x%x after wait loops=%d\r\n",
+               s_diag.hrsl_after_wait, i);
+    (void)blind_connect(); /* failure is reported through diagnostics */
+    xil_printf("USB HID: blind_connect rc=0x%x spi_dead=%d\r\n",
+               s_diag.blind_connect_rc, s_diag.spi_dead);
     return 0;
 }
 
@@ -310,9 +375,23 @@ int usb_hid_init(void)
 void usb_hid_poll(void)
 {
     BYTE kbd_buf[8];
+    BYTE rc;
+    uint8_t prev_report_count = (uint8_t)s_diag.report_count;
+
+    s_diag.poll_count++;
     MAXreg_wr(rPERADDR, 1u);
-    if (XferInTransfer(kbd_buf) == hrSUCCESS) {
+    rc = XferInTransfer(kbd_buf);
+    s_diag.last_poll_rc = rc;
+    if (rc == hrSUCCESS) {
+        memcpy(s_diag.last_report, kbd_buf, sizeof(s_diag.last_report));
+        s_diag.report_count++;
         parse_report(kbd_buf);
+        if ((uint8_t)s_diag.report_count != prev_report_count) {
+            xil_printf("USB HID: report %d keys=%x %x %x %x %x %x mod=%x\r\n",
+                       (unsigned int)s_diag.report_count,
+                       kbd_buf[2], kbd_buf[3], kbd_buf[4],
+                       kbd_buf[5], kbd_buf[6], kbd_buf[7], kbd_buf[0]);
+        }
     }
 }
 
@@ -326,14 +405,59 @@ uint8_t usb_hid_enter_pressed(void)
 uint8_t usb_hid_r_pressed(void)
     { uint8_t v = s_r_edge; s_r_edge = 0u; return v; }
 
+void usb_hid_get_diag(usb_hid_diag_t *diag)
+{
+    if (diag != NULL) {
+        *diag = s_diag;
+    }
+}
+
+void usb_hid_print_diag(const char *tag)
+{
+    xil_printf("USB HID[%s]: in=%d base=0x%x dead=%d rev=0x%x osc=%d "
+               "usb0=0x%x usb1=0x%x hrsl0=0x%x hrsl1=0x%x conn=0x%x "
+               "polls=%d reports=%d poll_rc=0x%x hirq=0x%x rcvbc=%d "
+               "report=%x %x %x %x %x %x %x %x\r\n",
+               (tag != NULL) ? tag : "",
+               s_diag.compiled_in, (unsigned int)s_diag.spi_base,
+               s_diag.spi_dead, s_diag.revision, s_diag.osc_ok,
+               s_diag.usbirq_initial, s_diag.usbirq_after_reset,
+               s_diag.hrsl_initial, s_diag.hrsl_after_wait,
+               s_diag.blind_connect_rc,
+               (unsigned int)s_diag.poll_count,
+               (unsigned int)s_diag.report_count,
+               s_diag.last_poll_rc, s_diag.last_hirq, s_diag.last_rcvbc,
+               s_diag.last_report[0], s_diag.last_report[1],
+               s_diag.last_report[2], s_diag.last_report[3],
+               s_diag.last_report[4], s_diag.last_report[5],
+               s_diag.last_report[6], s_diag.last_report[7]);
+}
+
 #else
 
-int     usb_hid_init(void)          { return -1; }
+int     usb_hid_init(void)
+{
+    xil_printf("USB HID: NOT compiled in; missing XPAR_SPI_USB_BASEADDR/XPAR_SPI_0_BASEADDR\r\n");
+    return -1;
+}
 void    usb_hid_poll(void)          {}
 uint8_t usb_hid_left_held(void)     { return 0u; }
 uint8_t usb_hid_right_held(void)    { return 0u; }
 uint8_t usb_hid_space_pressed(void) { return 0u; }
 uint8_t usb_hid_enter_pressed(void) { return 0u; }
 uint8_t usb_hid_r_pressed(void)     { return 0u; }
+
+void usb_hid_get_diag(usb_hid_diag_t *diag)
+{
+    if (diag != NULL) {
+        memset(diag, 0, sizeof(*diag));
+    }
+}
+
+void usb_hid_print_diag(const char *tag)
+{
+    xil_printf("USB HID[%s]: not compiled in; check generated xparameters.h\r\n",
+               (tag != NULL) ? tag : "");
+}
 
 #endif
