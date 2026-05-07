@@ -47,7 +47,6 @@ typedef unsigned short WORD;
 #define bmFDUPSPI     0x10u
 #define bmINTLEVEL    0x08u
 #define bmGPXB        0x02u
-#define rREVISION     0x90u
 #define rIOPINS1      0xa0u
 #define bmGPOUT0      0x01u
 #define rHIRQ         0xc8u
@@ -114,33 +113,15 @@ static uint8_t s_space_held;
 static uint8_t s_enter_held;
 static uint8_t s_r_held;
 
-/* Low 16 bits drive LEDs: in, spi_dead, osc_ok, report_seen, conn_rc, HRSL, poll_rc. */
+/* Low 16 bits drive LEDs: in, spi_dead, osc_ok, report_seen, HRSL, poll_rc. */
 static uint32_t s_status_word;
 
 #define STAT_COMPILED_IN      0x00008000u
 #define STAT_SPI_DEAD         0x00004000u
 #define STAT_OSC_OK           0x00002000u
 #define STAT_REPORT_SEEN      0x00001000u
-#define STAT_CONN_SHIFT       8u
 #define STAT_HRSL_SHIFT       6u
 #define STAT_POLL_MASK        0x0000003fu
-
-static void status_set_poll(BYTE rc)
-{
-    s_status_word = (s_status_word & ~STAT_POLL_MASK) | ((uint32_t)rc & STAT_POLL_MASK);
-}
-
-static void status_set_conn(BYTE rc)
-{
-    s_status_word = (s_status_word & ~(0x0fu << STAT_CONN_SHIFT)) |
-                    (((uint32_t)rc & 0x0fu) << STAT_CONN_SHIFT);
-}
-
-static void status_set_hrsl(BYTE hrsl)
-{
-    s_status_word = (s_status_word & ~(0x03u << STAT_HRSL_SHIFT)) |
-                    (((uint32_t)(hrsl >> 6u) & 0x03u) << STAT_HRSL_SHIFT);
-}
 
 /* -----------------------------------------------------------------------
  * SPI core: load TX FIFO, start, drain RX FIFO.
@@ -230,10 +211,8 @@ static BYTE XferInTransfer(BYTE *data)
     BYTE rcode, pktsize, i;
     MAXreg_wr(rHCTL, s_ep1_rcv_toggle);
     rcode = XferDispatchPkt(tokIN, 1u);
-    status_set_poll(rcode);
     if (rcode) return rcode;
     if ((MAXreg_rd(rHIRQ) & bmRCVDAVIRQ) == 0u) {
-        status_set_poll(0xf0u);
         return 0xf0u;
     }
     pktsize = MAXreg_rd(rRCVBC);
@@ -287,7 +266,8 @@ static BYTE blind_connect(void)
     unsigned int i;
 
     busstate = (BYTE)(MAXreg_rd(rHRSL) & (bmJSTATUS | bmKSTATUS));
-    status_set_hrsl(busstate);
+    s_status_word = (s_status_word & ~(0x03u << STAT_HRSL_SHIFT)) |
+                    (((uint32_t)(busstate >> 6u) & 0x03u) << STAT_HRSL_SHIFT);
     MAXreg_wr(rMODE, (busstate == bmJSTATUS) ? MODE_FS_HOST : MODE_LS_HOST);
     for (i = 0u; i < 20000u; i++) { (void)MAXreg_rd(rHIRQ); }
 
@@ -302,24 +282,14 @@ static BYTE blind_connect(void)
     }
 
     rcode = send_setup_nodata(0u, bmREQ_SET, USB_REQUEST_SET_ADDRESS, 1u, 0u, 0u);
-    if (rcode) {
-        status_set_conn(rcode);
-        return 0xffu;
-    }
+    if (rcode) return 0xffu;
     for (i = 0u; i < 200000u; i++) { (void)MAXreg_rd(rHIRQ); }
     rcode = send_setup_nodata(1u, bmREQ_SET, USB_REQUEST_SET_CONFIGURATION, 1u, 0u, 0u);
-    if (rcode) {
-        status_set_conn(rcode);
-        return 0xffu;
-    }
+    if (rcode) return 0xffu;
     rcode = send_setup_nodata(1u, bmREQ_HIDOUT, HID_REQUEST_SET_PROTOCOL, BOOT_PROTOCOL, 0u, 0u);
-    if (rcode) {
-        status_set_conn(rcode);
-        return 0xffu;
-    }
+    if (rcode) return 0xffu;
 
     s_ep1_rcv_toggle = bmRCVTOG0;
-    status_set_conn(0u);
     return 0u;
 }
 
@@ -331,7 +301,7 @@ int usb_hid_init(void)
     unsigned int i;
     BYTE usbirq_after_reset;
 
-    s_status_word = STAT_COMPILED_IN | STAT_POLL_MASK | (0x0fu << STAT_CONN_SHIFT);
+    s_status_word = STAT_COMPILED_IN | STAT_POLL_MASK;
     s_spi_dead = 0u;
     s_left_held = 0u;
     s_right_held = 0u;
@@ -347,9 +317,6 @@ int usb_hid_init(void)
     SPI_CR    = SPI_CR_BASE;
     SPI_SSR   = 1u;
 
-    s_status_word |= ((uint32_t)MAXreg_rd(rREVISION) << 24);
-    (void)MAXreg_rd(rUSBIRQ);
-
     MAXreg_wr(rPINCTL, (BYTE)(bmFDUPSPI | bmINTLEVEL | bmGPXB));
     MAXreg_wr(rUSBCTL, bmCHIPRES);
     MAXreg_wr(rUSBCTL, 0x00u);
@@ -357,7 +324,6 @@ int usb_hid_init(void)
         usbirq_after_reset = MAXreg_rd(rUSBIRQ);
         if (usbirq_after_reset & bmOSCOKIRQ) break;
     }
-    s_status_word |= ((uint32_t)usbirq_after_reset << 16);
     if (usbirq_after_reset & bmOSCOKIRQ) s_status_word |= STAT_OSC_OK;
 
     MAXreg_wr(rIOPINS1, (BYTE)(MAXreg_rd(rIOPINS1) | bmGPOUT0));
@@ -367,7 +333,8 @@ int usb_hid_init(void)
     /* Wait up to ~50K polls for device to appear, then try blind connect */
     for (i = 0u; i < 50000u; i++) {
         BYTE hrsl = (BYTE)(MAXreg_rd(rHRSL) & (bmJSTATUS | bmKSTATUS));
-        status_set_hrsl(hrsl);
+        s_status_word = (s_status_word & ~(0x03u << STAT_HRSL_SHIFT)) |
+                        (((uint32_t)(hrsl >> 6u) & 0x03u) << STAT_HRSL_SHIFT);
         if (hrsl) break;
     }
     (void)blind_connect(); /* failure is reported through diagnostics */
@@ -383,7 +350,7 @@ void usb_hid_poll(void)
 
     MAXreg_wr(rPERADDR, 1u);
     rc = XferInTransfer(kbd_buf);
-    status_set_poll(rc);
+    s_status_word = (s_status_word & ~STAT_POLL_MASK) | ((uint32_t)rc & STAT_POLL_MASK);
     if (rc == hrSUCCESS) {
         s_status_word |= STAT_REPORT_SEEN;
         parse_report(kbd_buf);
