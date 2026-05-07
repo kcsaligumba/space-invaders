@@ -95,5 +95,7 @@ void             write_sprite_registers(const game_t *game);
 uint32_t         count_alive_aliens(const game_t *game);
 uint8_t          get_alive_bit(const game_t *game, uint32_t row, uint32_t col);
 void             clear_alive_bit(game_t *game, uint32_t row, uint32_t col);
+uint32_t         score_to_bcd(uint32_t score);
+void             publish_score(const game_t *game);
 
 #endif

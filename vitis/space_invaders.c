@@ -22,10 +22,57 @@ static uint32_t alien_score_for_row(uint32_t row)
     return 10U;
 }
 
+static void award_alien_kill_score(game_t *game, uint32_t row)
+{
+    game->score += alien_score_for_row(row);
+    publish_score(game);
+}
+
 static uint16_t clamp_player_x(uint16_t x)
 {
     uint16_t max_x = SCREEN_W - PLAYER_W;
     return (x > max_x) ? max_x : x;
+}
+
+uint32_t score_to_bcd(uint32_t score)
+{
+    uint32_t bcd = 0U;
+    uint32_t digit;
+
+    if (score > 999999U) {
+        score = 999999U;
+    }
+
+    for (digit = 0U; digit < 6U; ++digit) {
+        bcd |= (score % 10U) << (digit * 4U);
+        score /= 10U;
+    }
+
+    return bcd;
+}
+
+void publish_score(const game_t *game)
+{
+    uint32_t score_bcd = score_to_bcd(game->score);
+
+    /*
+     * HEX display integration point:
+     * When the FPGA seven-segment/HEX display hardware is added,
+     * write score_bcd to that memory-mapped peripheral here.
+     *
+     * Expected format:
+     *   bits [3:0]   = ones digit
+     *   bits [7:4]   = tens digit
+     *   bits [11:8]  = hundreds digit
+     *   bits [15:12] = thousands digit
+     *   bits [19:16] = ten-thousands digit
+     *   bits [23:20] = hundred-thousands digit
+     */
+#ifdef XPAR_SCORE_DISPLAY_0_BASEADDR
+    Xil_Out32(XPAR_SCORE_DISPLAY_0_BASEADDR, score_bcd);
+#else
+    (void)score_bcd;
+#endif
 }
 
 void reset_game(game_t *game)
@@ -42,6 +89,7 @@ void reset_game(game_t *game)
     game->alien_anim_phase = 0U;
     game->alien_dir = 1;
     game->score = 0U;
+    publish_score(game);
     game->lives = 3U;
     game->last_frame_counter = Xil_In32(SPRITE_ENGINE_BASEADDR + REG_FRAME_COUNTER);
     game->alien_step_timer = 0U;
@@ -166,7 +214,7 @@ void check_projectile_alien_collision(game_t *game)
                 game->player_projectile.active = 0U;
                 game->player_projectile.x = 0U;
                 game->player_projectile.y = PROJECTILE_OFFSCREEN_Y;
-                game->score += alien_score_for_row(row);
+                award_alien_kill_score(game, row);
                 return;
             }
         }
