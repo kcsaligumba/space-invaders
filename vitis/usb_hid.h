@@ -3,6 +3,15 @@
 
 #include <stdint.h>
 
+#define USB_HID_STATUS_COMPILED_IN   0x00008000u
+#define USB_HID_STATUS_SPI_DEAD      0x00004000u
+#define USB_HID_STATUS_OSC_OK        0x00002000u
+#define USB_HID_STATUS_REPORT_SEEN   0x00001000u
+#define USB_HID_STATUS_GPIO_PRESENT  0x00000800u
+#define USB_HID_STATUS_HW_RESET_DONE 0x00000400u
+#define USB_HID_STATUS_INT_LOW       0x00000200u
+#define USB_HID_STATUS_POLL_MASK     0x0000003fu
+
 /*
  * Minimal USB HID keyboard driver for the MAX3421E USB host controller.
  * The MAX3421E communicates with MicroBlaze via an AXI Quad SPI peripheral.
@@ -15,8 +24,11 @@
  *        io1_i  <- usb_miso
  *        sck_o  -> usb_sclk
  *        ss_o   -> usb_ss_n
- *   3. The usb_int pin can be left as a GPIO input or unconnected for now
- *      (the driver polls; it does not use the interrupt line).
+ *   3. Connect dedicated one-bit AXI GPIOs for MAX3421E reset/interrupt:
+ *        AXI_GPIO_2 bit 0 -> usb_rst_n
+ *        AXI_GPIO_3 bit 0 <- usb_int_n
+ *      The driver still polls USB transfers, but samples usb_int_n for
+ *      diagnostics and uses usb_rst_n for deterministic hardware reset.
  *   4. Connect AXI Quad SPI's S_AXI to the AXI interconnect and assign an
  *      address. Run Connection Automation, Validate, re-generate bitstream.
  *

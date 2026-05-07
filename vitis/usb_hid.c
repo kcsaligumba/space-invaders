@@ -142,12 +142,48 @@ static uint8_t s_r_held;
 /* Status word: compiled-in, spi_dead, osc_ok, report_seen, HRSL, poll_rc. */
 static uint32_t s_status_word;
 
-#define STAT_COMPILED_IN      0x00008000u
-#define STAT_SPI_DEAD         0x00004000u
-#define STAT_OSC_OK           0x00002000u
-#define STAT_REPORT_SEEN      0x00001000u
+#define STAT_COMPILED_IN      USB_HID_STATUS_COMPILED_IN
+#define STAT_SPI_DEAD         USB_HID_STATUS_SPI_DEAD
+#define STAT_OSC_OK           USB_HID_STATUS_OSC_OK
+#define STAT_REPORT_SEEN      USB_HID_STATUS_REPORT_SEEN
+#define STAT_GPIO_PRESENT     USB_HID_STATUS_GPIO_PRESENT
+#define STAT_HW_RESET_DONE    USB_HID_STATUS_HW_RESET_DONE
+#define STAT_USB_INT_LOW      USB_HID_STATUS_INT_LOW
 #define STAT_HRSL_SHIFT       6u
-#define STAT_POLL_MASK        0x0000003fu
+#define STAT_POLL_MASK        USB_HID_STATUS_POLL_MASK
+
+#ifdef USB_HID_GPIO_PRESENT
+static void usb_sample_int(void)
+{
+    if ((USB_INT_DATA & USB_GPIO_BIT0) == 0u) {
+        s_status_word |= STAT_USB_INT_LOW;
+    } else {
+        s_status_word &= ~STAT_USB_INT_LOW;
+    }
+}
+
+static void usb_gpio_init_and_reset(void)
+{
+    volatile unsigned int i;
+
+    s_status_word |= STAT_GPIO_PRESENT;
+
+    USB_RST_TRI &= ~USB_GPIO_BIT0;  /* bit 0 output */
+    USB_INT_TRI |= USB_GPIO_BIT0;   /* bit 0 input */
+
+    USB_RST_DATA &= ~USB_GPIO_BIT0;
+    for (i = 0u; i < 20000u; i++) { }
+
+    USB_RST_DATA |= USB_GPIO_BIT0;
+    for (i = 0u; i < 200000u; i++) { }
+
+    s_status_word |= STAT_HW_RESET_DONE;
+    usb_sample_int();
+}
+#else
+static void usb_sample_int(void) {}
+static void usb_gpio_init_and_reset(void) {}
+#endif
 
 /* -----------------------------------------------------------------------
  * SPI core: load TX FIFO, start, drain RX FIFO.
@@ -337,6 +373,7 @@ int usb_hid_init(void)
     s_space_held = 0u;
     s_enter_held = 0u;
     s_r_held = 0u;
+    usb_gpio_init_and_reset();
     SPI_SRR   = 0x0Au;
     for (i = 0u; i < 200u; i++) { (void)i; }
     SPI_DGIER = 0u;
@@ -374,6 +411,7 @@ void usb_hid_poll(void)
     BYTE kbd_buf[8];
     BYTE rc;
 
+    usb_sample_int();
     MAXreg_wr(rPERADDR, 1u);
     rc = XferInTransfer(kbd_buf);
     s_status_word = (s_status_word & ~STAT_POLL_MASK) | ((uint32_t)rc & STAT_POLL_MASK);
@@ -395,6 +433,7 @@ uint8_t usb_hid_r_pressed(void)
 
 uint32_t usb_hid_status_word(void)
 {
+    usb_sample_int();
     return s_status_word;
 }
 
