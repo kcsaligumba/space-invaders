@@ -25,25 +25,6 @@
  * the game is unaffected.
  */
 
-typedef struct {
-    uint8_t  compiled_in;
-    uint8_t  spi_dead;
-    uint8_t  osc_ok;
-    uint8_t  revision;
-    uint8_t  usbirq_initial;
-    uint8_t  usbirq_after_reset;
-    uint8_t  hrsl_initial;
-    uint8_t  hrsl_after_wait;
-    uint8_t  blind_connect_rc;
-    uint8_t  last_poll_rc;
-    uint8_t  last_hirq;
-    uint8_t  last_rcvbc;
-    uint8_t  last_report[8];
-    uint32_t spi_base;
-    uint32_t poll_count;
-    uint32_t report_count;
-} usb_hid_diag_t;
-
 /* Call once from main() before the game loop. Returns 0 on success. */
 int usb_hid_init(void);
 
@@ -66,8 +47,7 @@ uint8_t usb_hid_space_pressed(void);
 uint8_t usb_hid_enter_pressed(void);
 uint8_t usb_hid_r_pressed(void);
 
-/* Temporary hardware debug helpers for bring-up. */
-void usb_hid_get_diag(usb_hid_diag_t *diag);
+/* Temporary hardware debug helper for bring-up. */
 uint32_t usb_hid_status_word(void);
 
 #endif /* USB_HID_H */
