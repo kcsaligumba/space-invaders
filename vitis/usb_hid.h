@@ -66,8 +66,8 @@ uint8_t usb_hid_space_pressed(void);
 uint8_t usb_hid_enter_pressed(void);
 uint8_t usb_hid_r_pressed(void);
 
-/* Temporary hardware debug helpers for UART-based bring-up. */
+/* Temporary hardware debug helpers for bring-up. */
 void usb_hid_get_diag(usb_hid_diag_t *diag);
-void usb_hid_print_diag(const char *tag);
+uint32_t usb_hid_status_word(void);
 
 #endif /* USB_HID_H */
