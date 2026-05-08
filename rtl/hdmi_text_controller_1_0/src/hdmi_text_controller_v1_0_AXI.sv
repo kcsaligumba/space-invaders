@@ -62,6 +62,10 @@ module hdmi_text_controller_v1_0_AXI #
     output logic [2:0]  alien_proj_active_out,
     output logic [29:0] alien_proj_x_out,
     output logic [29:0] alien_proj_y_out,
+    // UFO bonus alien (Step 15).  Same per-slot packing as PLAYER_PROJ but
+    // y is fixed in pixel_mux, so we only pass active and x.
+    output logic        ufo_active_out,
+    output logic [9:0]  ufo_x_out,
 
     input logic pixel_clk,
 
@@ -230,6 +234,11 @@ assign alien_proj_x_out[29:20]  = sprite_regs[5'h0A][9:0];
 assign alien_proj_y_out[9:0]    = sprite_regs[5'h08][25:16];
 assign alien_proj_y_out[19:10]  = sprite_regs[5'h09][25:16];
 assign alien_proj_y_out[29:20]  = sprite_regs[5'h0A][25:16];
+
+// UFO bonus alien lives at sprite_regs[5'h10] (byte offset 0x40 in the
+// sprite-state region).  Packing: [31]=active, [9:0]=x.
+assign ufo_active_out = sprite_regs[5'h10][31];
+assign ufo_x_out      = sprite_regs[5'h10][9:0];
 
 // Implement axi_awready generation
 // axi_awready is asserted for one S_AXI_ACLK clock cycle when both

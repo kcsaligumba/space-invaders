@@ -62,3 +62,23 @@ int collide_alien_proj_vs_player(const GameState *g, int idx)
     if (by_hi <= py_lo || by_lo >= py_hi) return 0;
     return 1;
 }
+
+int collide_player_proj_vs_ufo(const GameState *g)
+{
+    if (!g->player_proj.active) return 0;
+    if (!g->ufo.active) return 0;
+
+    int bx_lo = g->player_proj.x;
+    int bx_hi = bx_lo + PROJ_W;
+    int by_lo = g->player_proj.y;
+    int by_hi = by_lo + PROJ_H;
+
+    int ux_lo = g->ufo.x;
+    int ux_hi = ux_lo + UFO_W;
+    int uy_lo = UFO_Y;
+    int uy_hi = uy_lo + UFO_H;
+
+    if (bx_hi <= ux_lo || bx_lo >= ux_hi) return 0;
+    if (by_hi <= uy_lo || by_lo >= uy_hi) return 0;
+    return 1;
+}

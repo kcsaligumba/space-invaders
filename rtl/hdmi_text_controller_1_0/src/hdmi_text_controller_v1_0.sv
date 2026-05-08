@@ -97,6 +97,8 @@ logic [1:0]  game_state_w;
 logic [2:0]  alien_proj_active_w;
 logic [29:0] alien_proj_x_w;
 logic [29:0] alien_proj_y_w;
+logic        ufo_active_w;
+logic [9:0]  ufo_x_w;
 
 // -------------------------------------------------------------------------
 // HUD text-overlay path: palette + VRAM live in the AXI module; pixel_mux
@@ -138,6 +140,8 @@ hdmi_text_controller_v1_0_AXI # (
     .alien_proj_active_out(alien_proj_active_w),
     .alien_proj_x_out     (alien_proj_x_w),
     .alien_proj_y_out     (alien_proj_y_w),
+    .ufo_active_out       (ufo_active_w),
+    .ufo_x_out            (ufo_x_w),
 
     .pixel_clk            (clk_25MHz),
 
@@ -210,6 +214,8 @@ pixel_mux u_pixel_mux (
     .alien_proj_active (alien_proj_active_w),
     .alien_proj_x      (alien_proj_x_w),
     .alien_proj_y      (alien_proj_y_w),
+    .ufo_active        (ufo_active_w),
+    .ufo_x             (ufo_x_w),
 
     .palette_regs      (palette_regs_w),
     .vram_rd_data      (vram_rd_data_w),

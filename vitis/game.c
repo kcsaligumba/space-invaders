@@ -38,6 +38,12 @@ void game_reset(GameState *g)
         g->alien_proj[i].x      = 0;
         g->alien_proj[i].y      = 0;
     }
+    g->alien_proj_cooldown = 0;
+
+    g->ufo.active     = 0;
+    g->ufo.x          = 0;
+    g->ufo.dir        = +1;
+    g->ufo_spawn_timer = UFO_SPAWN_MIN;
 
     g->score = 0;
     g->lives = 3;
@@ -88,12 +94,13 @@ static void advance_grid(GameState *g)
     g->grid_step ^= 1;                          // two-frame animation phase
 }
 
-// Spawn an alien projectile in slot 0 from the bottom-most live alien in
-// a randomly-chosen live column.  No-op if all aliens are dead or slot 0
-// is already active.
-static void spawn_alien_proj_slot0(GameState *g)
+// Spawn an alien projectile in the given slot from the bottom-most live
+// alien in a randomly-chosen live column.  No-op if the slot is already
+// active or all aliens are dead.
+static void spawn_alien_proj_into(GameState *g, int slot)
 {
-    if (g->alien_proj[0].active) return;
+    if (slot < 0 || slot >= ALIEN_PROJ_COUNT) return;
+    if (g->alien_proj[slot].active) return;
 
     // Collect columns that have at least one live alien.
     int alive_cols[ALIEN_COLS];
@@ -120,9 +127,33 @@ static void spawn_alien_proj_slot0(GameState *g)
     int alien_x = g->grid_x + col * ALIEN_STRIDE_X;
     int alien_y = g->grid_y + bottom_row * ALIEN_STRIDE_Y;
 
-    g->alien_proj[0].active = 1;
-    g->alien_proj[0].x      = alien_x + (ALIEN_W - PROJ_W) / 2;  // centered on alien
-    g->alien_proj[0].y      = alien_y + ALIEN_H;                 // just below alien
+    g->alien_proj[slot].active = 1;
+    g->alien_proj[slot].x      = alien_x + (ALIEN_W - PROJ_W) / 2;  // centered on alien
+    g->alien_proj[slot].y      = alien_y + ALIEN_H;                 // just below alien
+}
+
+// Periodic UFO bonus alien.  When inactive, count down a per-frame timer
+// and spawn from a random side; when active, glide in fixed direction at
+// UFO_SPEED logical px/frame and deactivate once fully off the opposite
+// edge.
+static void ufo_tick(GameState *g)
+{
+    if (g->ufo.active) {
+        g->ufo.x += g->ufo.dir * UFO_SPEED;
+        if (g->ufo.dir > 0 && g->ufo.x > 320) {
+            g->ufo.active = 0;
+        } else if (g->ufo.dir < 0 && g->ufo.x + UFO_W < 0) {
+            g->ufo.active = 0;
+        }
+        return;
+    }
+    if (--g->ufo_spawn_timer <= 0) {
+        g->ufo.active = 1;
+        g->ufo.dir    = (rand() & 1) ? +1 : -1;
+        g->ufo.x      = (g->ufo.dir > 0) ? -UFO_W : 320;
+        int span      = UFO_SPAWN_MAX - UFO_SPAWN_MIN + 1;
+        g->ufo_spawn_timer = UFO_SPAWN_MIN + (rand() % span);
+    }
 }
 
 // Returns the highest row index containing any live alien, or -1 if grid empty.
@@ -136,14 +167,15 @@ static int lowest_live_row(const GameState *g)
     return -1;
 }
 
-// Clear every projectile slot.  Called when transitioning out of PLAYING
-// so a stray bullet doesn't keep rendering during STATE_GAMEOVER.
+// Clear every projectile slot and the UFO.  Called when transitioning
+// out of PLAYING so stray sprites don't keep rendering during GAMEOVER.
 static void clear_all_projectiles(GameState *g)
 {
     g->player_proj.active = 0;
     for (int i = 0; i < ALIEN_PROJ_COUNT; i++) {
         g->alien_proj[i].active = 0;
     }
+    g->ufo.active = 0;
 }
 
 // Trim fully-dead leftmost columns from the alien grid: shift the bitmap
@@ -228,8 +260,21 @@ void game_tick(GameState *g)
         }
     }
 
-    // Alien projectile (slot 0): respawn whenever the slot is free.
-    spawn_alien_proj_slot0(g);
+    // Alien projectile spawn: at most one new bullet every
+    // ALIEN_PROJ_COOLDOWN frames; fills the lowest free slot.  Up to
+    // ALIEN_PROJ_COUNT bullets can be in flight simultaneously.
+    if (g->alien_proj_cooldown > 0) g->alien_proj_cooldown--;
+    if (g->alien_proj_cooldown == 0) {
+        for (int i = 0; i < ALIEN_PROJ_COUNT; i++) {
+            if (!g->alien_proj[i].active) {
+                spawn_alien_proj_into(g, i);
+                if (g->alien_proj[i].active) {
+                    g->alien_proj_cooldown = ALIEN_PROJ_COOLDOWN;
+                }
+                break;
+            }
+        }
+    }
 
     // Advance every active alien projectile downward; deactivate when off
     // the bottom of the playfield.
@@ -256,6 +301,17 @@ void game_tick(GameState *g)
                 return;
             }
         }
+    }
+
+    // UFO bonus: glides across the top of the playfield on a timer.
+    // Player projectile destroys it for UFO_BONUS points.
+    ufo_tick(g);
+    if (g->player_proj.active && g->ufo.active &&
+        collide_player_proj_vs_ufo(g)) {
+        g->player_proj.active = 0;
+        g->ufo.active         = 0;
+        g->score             += UFO_BONUS;
+        xil_printf("ufo: +%d -> score: %d\r\n", UFO_BONUS, g->score);
     }
 
     // Game-over if the lowest live alien row has descended to the player y.
@@ -314,6 +370,8 @@ void game_commit_to_hardware(const GameState *g)
                               (uint16_t)g->alien_proj[i].x,
                               (uint16_t)g->alien_proj[i].y);
     }
+
+    sprite_set_ufo(g->ufo.active, (uint16_t)g->ufo.x);
 
     sprite_set_game_state(g->state);
 }

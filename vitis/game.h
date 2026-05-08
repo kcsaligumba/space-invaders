@@ -39,15 +39,30 @@
 #define PROJ_H            6
 #define PROJ_SPEED        4                     // logical pixels/frame, upward
 
-// Alien projectiles (3 slots wired in HDL; Step 11 spawns slot 0 only,
-// Step 14 stretch fills slots 1 and 2).
-#define ALIEN_PROJ_COUNT  3
-#define ALIEN_PROJ_SPEED  2                     // logical pixels/frame, downward
+// Alien projectiles (3 slots wired in HDL).
+#define ALIEN_PROJ_COUNT      3
+#define ALIEN_PROJ_SPEED      2                 // logical pixels/frame, downward
+#define ALIEN_PROJ_COOLDOWN  45                 // frames between spawns
+
+// UFO bonus alien (16x8 logical, drawn at fixed y=UFO_Y above the grid).
+#define UFO_W              16
+#define UFO_H               8
+#define UFO_Y              20                   // logical y; sits between HUD and grid
+#define UFO_SPEED           1                   // logical pixels/frame, horizontal
+#define UFO_BONUS         100                   // points awarded on kill
+#define UFO_SPAWN_MIN    1200                   // ~20 s at 60 Hz
+#define UFO_SPAWN_MAX    1800                   // ~30 s
 
 typedef struct {
     int active;
     int x, y;                                   // logical top-left
 } Projectile;
+
+typedef struct {
+    int active;
+    int x;                                      // logical top-left x; y fixed at UFO_Y
+    int dir;                                    // +1 = moving right, -1 = moving left
+} Ufo;
 
 typedef struct {
     int        player_x;                          // logical 0..PLAY_X_MAX
@@ -59,6 +74,9 @@ typedef struct {
     int        alive_count;                       // cached; recomputed when changed
     Projectile player_proj;
     Projectile alien_proj[ALIEN_PROJ_COUNT];
+    int        alien_proj_cooldown;             // frames until next spawn allowed
+    Ufo        ufo;
+    int        ufo_spawn_timer;                 // frames until next UFO spawn
     int        score;
     int        lives;
     uint8_t    state;                             // STATE_START / PLAYING / GAMEOVER

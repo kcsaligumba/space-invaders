@@ -35,6 +35,10 @@ module pixel_mux (
     input  logic [29:0] alien_proj_x,
     input  logic [29:0] alien_proj_y,
 
+    // UFO bonus alien (16x8, fixed y).
+    input  logic        ufo_active,
+    input  logic [9:0]  ufo_x,
+
     // HUD text overlay (Lab 7-style: 80x30 chars, 8x16 font, palette-coloured).
     input  logic [31:0] palette_regs [8],
     input  logic [31:0] vram_rd_data,
@@ -64,6 +68,21 @@ module pixel_mux (
 
     localparam int PROJ_W = 2;
     localparam int PROJ_H = 6;
+
+    localparam int UFO_W = 16;
+    localparam int UFO_H = 8;
+    localparam int UFO_Y = 20;                  // logical y; sits above grid
+
+    // Title-screen sprite positions (rendered only during STATE_START to
+    // form the *SCORE ADVANCE TABLE*).  All four sprites left-aligned at
+    // logical x=128 so the text on the right at char col 37 lines up.
+    // Each sprite is 8 logical (= 16 screen) tall, exactly one char row;
+    // logical_y = char_row * 8.
+    localparam int TITLE_X         = 128;
+    localparam int TITLE_UFO_Y     = 120;       // char row 15
+    localparam int TITLE_OCTOPUS_Y = 136;       // char row 17
+    localparam int TITLE_CRAB_Y    = 152;       // char row 19
+    localparam int TITLE_SQUID_Y   = 168;       // char row 21
 
     // --- Player sprite ROM ---
     logic [$clog2(PLAYER_H)-1:0] player_row;
@@ -96,6 +115,33 @@ module pixel_mux (
         u_alien_rom_c1 (.clk(pixel_clk), .row(alien_row), .row_bits(alien_bits_c1));
     sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("alienC2.mem"))
         u_alien_rom_c2 (.clk(pixel_clk), .row(alien_row), .row_bits(alien_bits_c2));
+
+    // --- UFO sprite ROM (16x8, single frame) ---
+    logic [$clog2(UFO_H)-1:0] ufo_row;
+    logic [UFO_W-1:0]         ufo_bits;
+    sprite_rom #(.WIDTH(UFO_W), .HEIGHT(UFO_H), .INIT_FILE("ufo.mem"))
+        u_ufo_rom (.clk(pixel_clk), .row(ufo_row), .row_bits(ufo_bits));
+
+    // --- Title-screen sprite ROMs (4 dedicated instances; tiny LUT-RAMs) ---
+    logic [$clog2(UFO_H)-1:0]   title_ufo_row;
+    logic [UFO_W-1:0]           title_ufo_bits;
+    sprite_rom #(.WIDTH(UFO_W), .HEIGHT(UFO_H), .INIT_FILE("ufo.mem"))
+        u_title_ufo_rom (.clk(pixel_clk), .row(title_ufo_row), .row_bits(title_ufo_bits));
+
+    logic [$clog2(ALIEN_H)-1:0] title_octopus_row;
+    logic [ALIEN_W-1:0]         title_octopus_bits;
+    sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("alienC1.mem"))
+        u_title_octopus_rom (.clk(pixel_clk), .row(title_octopus_row), .row_bits(title_octopus_bits));
+
+    logic [$clog2(ALIEN_H)-1:0] title_crab_row;
+    logic [ALIEN_W-1:0]         title_crab_bits;
+    sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("alienB1.mem"))
+        u_title_crab_rom (.clk(pixel_clk), .row(title_crab_row), .row_bits(title_crab_bits));
+
+    logic [$clog2(ALIEN_H)-1:0] title_squid_row;
+    logic [ALIEN_W-1:0]         title_squid_bits;
+    sprite_rom #(.WIDTH(ALIEN_W), .HEIGHT(ALIEN_H), .INIT_FILE("alienA1.mem"))
+        u_title_squid_rom (.clk(pixel_clk), .row(title_squid_row), .row_bits(title_squid_bits));
 
     // --- Player hit test (combinational address into ROM) ---
     logic        in_player;
@@ -188,6 +234,74 @@ module pixel_mux (
             in_alien_proj[i] = alien_proj_active[i] &&
                 (lx >= alien_proj_x_u[i]) && (lx < alien_proj_x_u[i] + PROJ_W) &&
                 (ly >= alien_proj_y_u[i]) && (ly < alien_proj_y_u[i] + PROJ_H);
+        end
+    end
+
+    // --- UFO hit test ---
+    logic       in_ufo;
+    logic [3:0] ufo_dx;
+    always_comb begin
+        in_ufo  = 1'b0;
+        ufo_dx  = '0;
+        ufo_row = '0;
+        if (ufo_active &&
+            lx >= ufo_x && lx < (ufo_x + UFO_W) &&
+            ly >= UFO_Y && ly < (UFO_Y + UFO_H)) begin
+            in_ufo  = 1'b1;
+            ufo_dx  = UFO_W - 1 - (lx - ufo_x);
+            ufo_row = ly - UFO_Y;
+        end
+    end
+
+    // --- Title-screen sprite hit tests (4 fixed positions) ---
+    logic       in_title_ufo, in_title_octopus, in_title_crab, in_title_squid;
+    logic [3:0] title_ufo_dx, title_octopus_dx, title_crab_dx, title_squid_dx;
+
+    always_comb begin
+        in_title_ufo  = 1'b0;
+        title_ufo_dx  = '0;
+        title_ufo_row = '0;
+        if (lx >= TITLE_X && lx < (TITLE_X + UFO_W) &&
+            ly >= TITLE_UFO_Y && ly < (TITLE_UFO_Y + UFO_H)) begin
+            in_title_ufo  = 1'b1;
+            title_ufo_dx  = UFO_W - 1 - (lx - TITLE_X);
+            title_ufo_row = ly - TITLE_UFO_Y;
+        end
+    end
+
+    always_comb begin
+        in_title_octopus  = 1'b0;
+        title_octopus_dx  = '0;
+        title_octopus_row = '0;
+        if (lx >= TITLE_X && lx < (TITLE_X + ALIEN_W) &&
+            ly >= TITLE_OCTOPUS_Y && ly < (TITLE_OCTOPUS_Y + ALIEN_H)) begin
+            in_title_octopus  = 1'b1;
+            title_octopus_dx  = ALIEN_W - 1 - (lx - TITLE_X);
+            title_octopus_row = ly - TITLE_OCTOPUS_Y;
+        end
+    end
+
+    always_comb begin
+        in_title_crab  = 1'b0;
+        title_crab_dx  = '0;
+        title_crab_row = '0;
+        if (lx >= TITLE_X && lx < (TITLE_X + ALIEN_W) &&
+            ly >= TITLE_CRAB_Y && ly < (TITLE_CRAB_Y + ALIEN_H)) begin
+            in_title_crab  = 1'b1;
+            title_crab_dx  = ALIEN_W - 1 - (lx - TITLE_X);
+            title_crab_row = ly - TITLE_CRAB_Y;
+        end
+    end
+
+    always_comb begin
+        in_title_squid  = 1'b0;
+        title_squid_dx  = '0;
+        title_squid_row = '0;
+        if (lx >= TITLE_X && lx < (TITLE_X + ALIEN_W) &&
+            ly >= TITLE_SQUID_Y && ly < (TITLE_SQUID_Y + ALIEN_H)) begin
+            in_title_squid  = 1'b1;
+            title_squid_dx  = ALIEN_W - 1 - (lx - TITLE_X);
+            title_squid_row = ly - TITLE_SQUID_Y;
         end
     end
 
@@ -291,19 +405,33 @@ module pixel_mux (
     logic [1:0] game_state_r;
     logic [2:0] in_alien_proj_r;
     logic       in_hud_r;
+    logic       in_ufo_r;
+    logic [3:0] ufo_dx_r;
+    logic       in_title_ufo_r, in_title_octopus_r, in_title_crab_r, in_title_squid_r;
+    logic [3:0] title_ufo_dx_r, title_octopus_dx_r, title_crab_dx_r, title_squid_dx_r;
 
     always_ff @(posedge pixel_clk) begin
-        in_player_r      <= in_player;
-        in_alien_cell_r  <= in_alien_cell;
-        in_player_proj_r <= in_player_proj;
-        in_alien_proj_r  <= in_alien_proj;
-        in_hud_r         <= in_hud;
-        player_dx_r      <= player_dx;
-        alien_dx_r       <= alien_dx;
-        alien_idx_r      <= alien_idx;
-        alien_type_r     <= alien_type;
-        active_r         <= active;
-        game_state_r     <= game_state;
+        in_player_r        <= in_player;
+        in_alien_cell_r    <= in_alien_cell;
+        in_player_proj_r   <= in_player_proj;
+        in_alien_proj_r    <= in_alien_proj;
+        in_hud_r           <= in_hud;
+        in_ufo_r           <= in_ufo;
+        in_title_ufo_r     <= in_title_ufo;
+        in_title_octopus_r <= in_title_octopus;
+        in_title_crab_r    <= in_title_crab;
+        in_title_squid_r   <= in_title_squid;
+        player_dx_r        <= player_dx;
+        alien_dx_r         <= alien_dx;
+        alien_idx_r        <= alien_idx;
+        alien_type_r       <= alien_type;
+        ufo_dx_r           <= ufo_dx;
+        title_ufo_dx_r     <= title_ufo_dx;
+        title_octopus_dx_r <= title_octopus_dx;
+        title_crab_dx_r    <= title_crab_dx;
+        title_squid_dx_r   <= title_squid_dx;
+        active_r           <= active;
+        game_state_r       <= game_state;
     end
 
     // --- Select alien sprite bits based on registered type + animation phase ---
@@ -321,10 +449,18 @@ module pixel_mux (
     logic player_pix;
     logic alien_pix;
     logic alien_alive_bit;
+    logic ufo_pix;
 
     assign player_pix      = player_bits[player_dx_r];
     assign alien_pix       = alien_bits[alien_dx_r];
     assign alien_alive_bit = alien_alive[alien_idx_r];
+    assign ufo_pix         = ufo_bits[ufo_dx_r];
+
+    logic title_ufo_pix, title_octopus_pix, title_crab_pix, title_squid_pix;
+    assign title_ufo_pix     = title_ufo_bits[title_ufo_dx_r];
+    assign title_octopus_pix = title_octopus_bits[title_octopus_dx_r];
+    assign title_crab_pix    = title_crab_bits[title_crab_dx_r];
+    assign title_squid_pix   = title_squid_bits[title_squid_dx_r];
 
     // --- Priority mux ---
     localparam bit [1:0] STATE_START    = 2'd0;
@@ -341,28 +477,41 @@ module pixel_mux (
                 red   = 8'h20;
             end
 
-            // HUD text overlay (top HUD_HEIGHT lines).  Only paint the
-            // foreground glyph pixels and leave HUD-background pixels as
-            // the default screen colour -- so during STATE_GAMEOVER the
-            // red tint (set above) shows through the HUD area too,
-            // matching the rest of the screen.  Replicate the 4-bit
-            // palette colour into the upper 4 bits of each 8-bit channel
-            // so hdmi_tx_0's high-nibble extraction keeps it intact.
-            if (in_hud_r && (font_pixel ^ inverse)) begin
+            // HUD text overlay (full screen now -- title text on row 1
+            // SCORE/LIVES + extra title rows during STATE_START, etc.).
+            // Only paint foreground glyph pixels so background pixels
+            // fall through to the default (which is the GAMEOVER red
+            // tint when in that state).  Replicate the 4-bit palette
+            // colour into the upper 4 bits of each 8-bit channel so
+            // hdmi_tx_0's high-nibble extraction keeps it intact.
+            if (font_pixel ^ inverse) begin
                 red   = {fg_r, fg_r};
                 green = {fg_g, fg_g};
                 blue  = {fg_b, fg_b};
             end
 
             // Sprite layers (override HUD where they overlap).
-            // Priority: player_proj > alien_proj > player > aliens.
+            // Priority: player_proj > alien_proj > player > UFO >
+            //   title sprites (STATE_START only) > moving alien grid
+            //   (NOT STATE_START).
             if (in_player_proj_r) begin
                 red = 8'hFF; green = 8'hFF; blue = 8'hFF;
             end else if (|in_alien_proj_r) begin
                 red = 8'hFF; green = 8'hFF; blue = 8'hFF;
             end else if (in_player_r && player_pix && game_state_r == STATE_PLAYING) begin
                 red = 8'h00; green = 8'hFF; blue = 8'h40;
-            end else if (in_alien_cell_r && alien_alive_bit && alien_pix) begin
+            end else if (in_ufo_r && ufo_pix) begin
+                red = 8'hFF; green = 8'h00; blue = 8'h00;   // arcade-red UFO
+            end else if (game_state_r == STATE_START &&
+                         in_title_ufo_r && title_ufo_pix) begin
+                red = 8'hFF; green = 8'h00; blue = 8'h00;   // title UFO red
+            end else if (game_state_r == STATE_START &&
+                         ((in_title_octopus_r && title_octopus_pix) ||
+                          (in_title_crab_r    && title_crab_pix)    ||
+                          (in_title_squid_r   && title_squid_pix))) begin
+                red = 8'hFF; green = 8'hFF; blue = 8'hFF;   // title aliens white
+            end else if (game_state_r != STATE_START &&
+                         in_alien_cell_r && alien_alive_bit && alien_pix) begin
                 red = 8'hFF; green = 8'hFF; blue = 8'hFF;
             end
         end

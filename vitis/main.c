@@ -49,7 +49,7 @@ int main(void)
 {
     init_platform();
 
-    xil_printf("Step 11 + on-screen HUD\r\n");
+    xil_printf("Title screen + GAME OVER overlay\r\n");
 
     // Initialize hardware sprite registers and game state.
     sprite_init();
@@ -60,7 +60,7 @@ int main(void)
     game_reset(&gs);
     game_commit_to_hardware(&gs);
     hex_write_score_lives(gs.score, gs.lives);
-    hud_write_score_lives(gs.score, gs.lives);
+    hud_update(gs.state, gs.score, gs.lives);
 
     // USB host stack
     xil_printf("initializing MAX3421E...\r\n");
@@ -126,7 +126,7 @@ int main(void)
         // Push state to hardware.
         game_commit_to_hardware(&gs);
         hex_write_score_lives(gs.score, gs.lives);
-        hud_write_score_lives(gs.score, gs.lives);
+        hud_update(gs.state, gs.score, gs.lives);
     }
 
     cleanup_platform();

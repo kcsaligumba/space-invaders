@@ -25,4 +25,8 @@ int collide_player_proj_vs_aliens(const GameState *g, HitCell *out_hit);
 // the player's PLAYER_W x PLAYER_H rect at (player_x, PLAYER_Y).  Pure AABB.
 int collide_alien_proj_vs_player(const GameState *g, int idx);
 
+// Returns 1 if the player projectile is active and its rect overlaps the
+// active UFO at (ufo.x, UFO_Y, UFO_W, UFO_H).  Pure AABB.
+int collide_player_proj_vs_ufo(const GameState *g);
+
 #endif // COLLIDE_H
