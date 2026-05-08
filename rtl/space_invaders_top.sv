@@ -24,7 +24,13 @@ module space_invaders_top (
     input  logic        usb_miso,
     output logic        usb_ss_n,
     output logic        usb_rst_n,
-    input  logic        usb_int_n
+    input  logic        usb_int_n,
+
+    // Onboard multiplexed HEX displays
+    output logic [7:0]  hex_segA,
+    output logic [3:0]  hex_gridA,
+    output logic [7:0]  hex_segB,
+    output logic [3:0]  hex_gridB
 );
 
     design_1_wrapper u_bd (
@@ -46,7 +52,12 @@ module space_invaders_top (
         .usb_miso  (usb_miso),
         .usb_ss_n  (usb_ss_n),
         .usb_rst_n_tri_o (usb_rst_n),
-        .usb_int_n_tri_i (usb_int_n)
+        .usb_int_n_tri_i (usb_int_n),
+
+        .hex_segA  (hex_segA),
+        .hex_gridA (hex_gridA),
+        .hex_segB  (hex_segB),
+        .hex_gridB (hex_gridB)
     );
 
 endmodule
