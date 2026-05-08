@@ -35,6 +35,11 @@ module pixel_mux (
     input  logic [29:0] alien_proj_x,
     input  logic [29:0] alien_proj_y,
 
+    // HUD text overlay (Lab 7-style: 80x30 chars, 8x16 font, palette-coloured).
+    input  logic [31:0] palette_regs [8],
+    input  logic [31:0] vram_rd_data,
+    output logic [10:0] vram_rd_addr,
+
     output logic [7:0]  red,
     output logic [7:0]  green,
     output logic [7:0]  blue
@@ -186,6 +191,98 @@ module pixel_mux (
         end
     end
 
+    // -------------------------------------------------------------------
+    // HUD text overlay (Lab 7 80x30 / 8x16 font / palette pipeline).
+    // Only the top HUD_HEIGHT lines actually display text; outside that
+    // the priority mux ignores the text RGB.
+    // -------------------------------------------------------------------
+    localparam int HUD_HEIGHT = 32;     // 2 char rows = 32 screen px
+
+    logic [5:0]  char_row;
+    logic [6:0]  char_col;
+    logic [3:0]  pixel_row;
+    logic [2:0]  pixel_col;
+    logic        half_sel;
+
+    assign char_col  = drawX[9:3];
+    assign char_row  = drawY[9:4];
+    assign pixel_col = drawX[2:0];
+    assign pixel_row = drawY[3:0];
+    assign half_sel  = char_col[0];
+
+    // word_addr = char_row * 40 + char_col / 2  (1200 32-bit words = 80*30/2)
+    assign vram_rd_addr = (char_row * 7'd40) + char_col[6:1];
+
+    // 1-cycle pipeline registers to align with BRAM read latency.
+    logic       half_sel_reg;
+    logic [2:0] pixel_col_reg;
+    logic [3:0] pixel_row_reg;
+    always_ff @(posedge pixel_clk) begin
+        half_sel_reg  <= half_sel;
+        pixel_col_reg <= pixel_col;
+        pixel_row_reg <= pixel_row;
+    end
+
+    // Decode the 16-bit half-word that vram_rd_data delivers (registered).
+    //   [15]=inverse, [14:8]=char_code, [7:4]=fg_idx, [3:0]=bg_idx
+    logic [6:0] char_code;
+    logic       inverse;
+    logic [3:0] fgd_idx;
+    logic [3:0] bkg_idx;
+    always_comb begin
+        if (half_sel_reg == 1'b0) begin
+            char_code = vram_rd_data[14:8];
+            inverse   = vram_rd_data[15];
+            fgd_idx   = vram_rd_data[7:4];
+            bkg_idx   = vram_rd_data[3:0];
+        end else begin
+            char_code = vram_rd_data[30:24];
+            inverse   = vram_rd_data[31];
+            fgd_idx   = vram_rd_data[23:20];
+            bkg_idx   = vram_rd_data[19:16];
+        end
+    end
+
+    // Combinational 8x16 font ROM.
+    logic [10:0] font_addr;
+    logic [7:0]  font_data;
+    logic        font_pixel;
+    assign font_addr  = {char_code, pixel_row_reg};
+    font_rom u_font (.addr(font_addr), .data(font_data));
+    assign font_pixel = font_data[7 - pixel_col_reg];
+
+    // Palette decode: 2 colours per 32-bit register, 12-bit RGB each.
+    //   even idx -> [11:8]=R, [7:4]=G, [3:0]=B
+    //   odd  idx -> [27:24]=R, [23:20]=G, [19:16]=B
+    logic [3:0] fg_r, fg_g, fg_b;
+    logic [3:0] bg_r, bg_g, bg_b;
+    always_comb begin
+        if (fgd_idx[0] == 1'b0) begin
+            fg_r = palette_regs[fgd_idx[3:1]][11:8];
+            fg_g = palette_regs[fgd_idx[3:1]][7:4];
+            fg_b = palette_regs[fgd_idx[3:1]][3:0];
+        end else begin
+            fg_r = palette_regs[fgd_idx[3:1]][27:24];
+            fg_g = palette_regs[fgd_idx[3:1]][23:20];
+            fg_b = palette_regs[fgd_idx[3:1]][19:16];
+        end
+    end
+    always_comb begin
+        if (bkg_idx[0] == 1'b0) begin
+            bg_r = palette_regs[bkg_idx[3:1]][11:8];
+            bg_g = palette_regs[bkg_idx[3:1]][7:4];
+            bg_b = palette_regs[bkg_idx[3:1]][3:0];
+        end else begin
+            bg_r = palette_regs[bkg_idx[3:1]][27:24];
+            bg_g = palette_regs[bkg_idx[3:1]][23:20];
+            bg_b = palette_regs[bkg_idx[3:1]][19:16];
+        end
+    end
+
+    // Pre-pick foreground vs background per pixel (registered drawY check).
+    logic       in_hud;
+    assign in_hud = (drawY < HUD_HEIGHT);
+
     // --- Register hit-test results to align with 1-cycle ROM latency ---
     logic       in_player_r, in_alien_cell_r, in_player_proj_r, active_r;
     logic [3:0] player_dx_r, alien_dx_r;
@@ -193,12 +290,14 @@ module pixel_mux (
     logic [1:0] alien_type_r;
     logic [1:0] game_state_r;
     logic [2:0] in_alien_proj_r;
+    logic       in_hud_r;
 
     always_ff @(posedge pixel_clk) begin
         in_player_r      <= in_player;
         in_alien_cell_r  <= in_alien_cell;
         in_player_proj_r <= in_player_proj;
         in_alien_proj_r  <= in_alien_proj;
+        in_hud_r         <= in_hud;
         player_dx_r      <= player_dx;
         alien_dx_r       <= alien_dx;
         alien_idx_r      <= alien_idx;
@@ -237,11 +336,26 @@ module pixel_mux (
         green = 8'h00;
         blue  = 8'h00;
         if (active_r) begin
-            // background stays black; tint slightly on GAME OVER
+            // Background tint on GAME OVER.
             if (game_state_r == STATE_GAMEOVER) begin
                 red   = 8'h20;
             end
-            // Priority: player_proj > alien_proj > player > aliens > background.
+
+            // HUD text overlay (top HUD_HEIGHT lines).  Only paint the
+            // foreground glyph pixels and leave HUD-background pixels as
+            // the default screen colour -- so during STATE_GAMEOVER the
+            // red tint (set above) shows through the HUD area too,
+            // matching the rest of the screen.  Replicate the 4-bit
+            // palette colour into the upper 4 bits of each 8-bit channel
+            // so hdmi_tx_0's high-nibble extraction keeps it intact.
+            if (in_hud_r && (font_pixel ^ inverse)) begin
+                red   = {fg_r, fg_r};
+                green = {fg_g, fg_g};
+                blue  = {fg_b, fg_b};
+            end
+
+            // Sprite layers (override HUD where they overlap).
+            // Priority: player_proj > alien_proj > player > aliens.
             if (in_player_proj_r) begin
                 red = 8'hFF; green = 8'hFF; blue = 8'hFF;
             end else if (|in_alien_proj_r) begin

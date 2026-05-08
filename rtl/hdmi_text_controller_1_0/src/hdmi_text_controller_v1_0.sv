@@ -99,11 +99,13 @@ logic [29:0] alien_proj_x_w;
 logic [29:0] alien_proj_y_w;
 
 // -------------------------------------------------------------------------
-// Legacy palette/VRAM ports kept for AXI module compatibility.
-// pixel_mux uses hard-coded RGB constants; these are unused for now.
+// HUD text-overlay path: palette + VRAM live in the AXI module; pixel_mux
+// drives vram_rd_addr from drawX/drawY and consumes vram_rd_data + the 8
+// palette registers to render an 8x16 font HUD on the top of the screen.
 // -------------------------------------------------------------------------
-logic [C_AXI_DATA_WIDTH-1:0] palette_regs_unused [8];
-logic [C_AXI_DATA_WIDTH-1:0] vram_rd_data_unused;
+logic [C_AXI_DATA_WIDTH-1:0] palette_regs_w [8];
+logic [C_AXI_DATA_WIDTH-1:0] vram_rd_data_w;
+logic [10:0]                 vram_rd_addr_w;
 
 // -------------------------------------------------------------------------
 // AXI register file
@@ -116,12 +118,12 @@ hdmi_text_controller_v1_0_AXI # (
     .current_draw_x       ({22'b0, drawX}),
     .current_draw_y       ({22'b0, drawY}),
 
-    // VRAM display-side read port: tied off in sprite-mode
-    .vram_rd_addr         (11'b0),
-    .vram_rd_data         (vram_rd_data_unused),
+    // VRAM display-side read port: driven by pixel_mux for HUD overlay.
+    .vram_rd_addr         (vram_rd_addr_w),
+    .vram_rd_data         (vram_rd_data_w),
 
-    // Legacy palette outputs (unused)
-    .palette_regs_out     (palette_regs_unused),
+    // Palette registers: consumed by pixel_mux for the HUD overlay.
+    .palette_regs_out     (palette_regs_w),
 
     // Sprite-state outputs
     .player_x_out         (player_x_w),
@@ -208,6 +210,10 @@ pixel_mux u_pixel_mux (
     .alien_proj_active (alien_proj_active_w),
     .alien_proj_x      (alien_proj_x_w),
     .alien_proj_y      (alien_proj_y_w),
+
+    .palette_regs      (palette_regs_w),
+    .vram_rd_data      (vram_rd_data_w),
+    .vram_rd_addr      (vram_rd_addr_w),
 
     .red               (mux_red),
     .green             (mux_green),
